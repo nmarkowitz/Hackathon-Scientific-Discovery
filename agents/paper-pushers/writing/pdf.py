@@ -12,6 +12,21 @@ _BASE64_IMG_RE = re.compile(r'!\[([^\]]*)\]\(data:image/(png|jpeg);base64,([^)]+
 _MD_BOLD_RE = re.compile(r'\*\*(.+?)\*\*')
 _MD_HEADING_RE = re.compile(r'^#{1,3}\s+(.+)$')
 
+_UNICODE_MAP = str.maketrans({
+    '—': '--',   # em dash
+    '–': '-',    # en dash
+    '‘': "'",    # left single quote
+    '’': "'",    # right single quote
+    '“': '"',    # left double quote
+    '”': '"',    # right double quote
+    '…': '...',  # ellipsis
+    ' ': ' ',    # non-breaking space
+    '•': '*',    # bullet
+})
+
+def _sanitize(text: str) -> str:
+    return text.translate(_UNICODE_MAP).encode('latin-1', errors='replace').decode('latin-1')
+
 
 class _PaperPDF(FPDF):
     def footer(self):
@@ -40,7 +55,7 @@ def _write_section(pdf: _PaperPDF, heading: str, text: str) -> None:
     pdf.set_x(pdf.l_margin)
     pdf.set_font("Helvetica", "B", 13)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(page_w, 8, heading, new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+    pdf.cell(page_w, 8, _sanitize(heading), new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
     pdf.ln(2)
 
     cleaned, images = _strip_base64_images(text)
@@ -50,11 +65,11 @@ def _write_section(pdf: _PaperPDF, heading: str, text: str) -> None:
         m = _MD_HEADING_RE.match(line)
         if m:
             pdf.set_font("Helvetica", "B", 11)
-            pdf.multi_cell(page_w, 6, m.group(1), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.multi_cell(page_w, 6, _sanitize(m.group(1)), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             pdf.set_font("Helvetica", "", 10)
             continue
 
-        plain = _MD_BOLD_RE.sub(r'\1', line).strip()
+        plain = _sanitize(_MD_BOLD_RE.sub(r'\1', line).strip())
         pdf.set_font("Helvetica", "", 10)
         if plain:
             pdf.multi_cell(page_w, 5, plain, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -92,7 +107,7 @@ def save_paper_as_pdf(paper: Paper, output_path: Path) -> Path:
     # Title
     pdf.set_x(pdf.l_margin)
     pdf.set_font("Helvetica", "B", 18)
-    pdf.multi_cell(page_w, 10, paper.title, align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.multi_cell(page_w, 10, _sanitize(paper.title), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(4)
 
     if paper.author or paper.date:

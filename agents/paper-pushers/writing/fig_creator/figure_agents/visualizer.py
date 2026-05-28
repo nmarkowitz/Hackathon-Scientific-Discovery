@@ -48,7 +48,7 @@ def render_figures(plans: list[FigurePlan], working_dir: Path) -> list[FigureArt
 
 
 def _diagram_code(plan: FigurePlan, filename: str) -> str:
-    elements = plan.elements[:5] or ["Context", "Mechanism", "Outcome"]
+    elements = [str(e) for e in (plan.elements[:5] or ["Context", "Mechanism", "Outcome"])]
     payload = {
         "title": plan.title,
         "caption": plan.caption,
@@ -113,7 +113,7 @@ plt.close(fig)
 
 
 def _plot_code(plan: FigurePlan, filename: str) -> str:
-    labels = [item[:18] for item in (plan.elements[:4] or ["Baseline", "Mechanism", "Outcome", "Replication"])]
+    labels = [str(item)[:18] for item in (plan.elements[:4] or ["Baseline", "Mechanism", "Outcome", "Replication"])]
     payload = {
         "title": plan.title,
         "caption": plan.caption,
