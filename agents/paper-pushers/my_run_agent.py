@@ -1,87 +1,124 @@
 """
-Run agent template for paper-pushers.
-Write your paper-generation logic here.
+Paper-pushers run agent.
+
+Workflow:
+  1. pull_papers()  — LLM-generated queries → PubMed + web search → saved paper files
+  2. _build_brief() — synthesize findings from fetched papers → ResearchBrief
+  3. orchestrate()  — parallel section writing + fig_creator + peer review → Paper
+  4. save_paper_as_pdf() — embed figures, save to papers/<title>/paper.pdf
 """
+import sys
 from pathlib import Path
 from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).parent))
+
 from hackathon_science import Paper
-from hackathon_science.tools import run_code, search_web, get_paper, image_to_base64
 from hackathon_science.utils import call_llm
 
+from pull_papers import pull_papers
+from writing import ResearchBrief, orchestrate
+from writing.pdf import save_paper_as_pdf
 
-def run(
-    problem_domain: str,
-    papers_dir: Optional[Path] = None
-) -> Paper:
-    """
-    Generate a research paper.
+_AGENT_DIR = Path(__file__).parent
+_PAPERS_DIR = _AGENT_DIR / "papers"
+MODEL_ID = "global.anthropic.claude-sonnet-4-6"
 
-    Args:
-        problem_domain: Research area prompt (same for all teams)
-        papers_dir: Optional path to papers directory (use with get_paper)
 
-    Returns:
-        Paper with structured fields (title, introduction, methods, results, references, appendix)
-        Note: appendix is auto-populated with code from script.py in working_dir if not set
-
-    Available tools:
-        - run_code(command, timeout=300): Execute bash in container
-        - search_web(query, max_results=10): Search web for background
-        - get_paper(paper_id, papers_dir): Read full paper by ID from ecosystem
-        - image_to_base64(image_path, alt_text): Convert image to base64 markdown
-        - call_llm(messages, model_id, tools=None): Call Bedrock or OpenAI model
-
-    Example:
-        # Run experiment
-        code_output = run_code("python -c 'import numpy as np; print(np.mean([1,2,3]))'")
-
-        # Search for context
-        search_results = search_web("multi-agent cooperation game theory")
-
-        # Read and build on related paper
-        if papers_dir:
-            related_paper = get_paper("abc12345", papers_dir)
-            if related_paper:
-                print(f"Building on: {related_paper['title']}")
-
-        # Embed images in paper
-        # Create a plot and save it
-        run_code('''
-import matplotlib.pyplot as plt
-plt.figure()
-plt.plot([1, 2, 3], [1, 4, 9])
-plt.savefig("plot.png")
-''')
-        # Convert to base64 markdown for embedding
-        plot_md = image_to_base64("plot.png", "Experimental Results")
-
-        # Call LLM via Bedrock
-        response = call_llm(
-            messages=[{"role": "user", "content": [{"text": "Analyze this data..."}]}],
-            model_id="us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+def _llm(system: str, user: str) -> str:
+    try:
+        r = call_llm(
+            messages=[{"role": "user", "content": [{"text": user}]}],
+            model_id=MODEL_ID,
+            system=[{"text": system}],
         )
-        # Or use OpenAI (requires OPENAI_API_KEY env var)
-        response = call_llm(
-            messages=[{"role": "user", "content": [{"text": "Analyze this data..."}]}],
-            model_id="gpt-4o"
-        )
-        # Extract text from response: response["output"]["message"]["content"][0]["text"]
-        output = response.get("output", {}).get("message", {}).get("content", [])
-        text = output[0].get("text", "") if output else ""
-    """
+        content = r.get("output", {}).get("message", {}).get("content", [])
+        return content[0].get("text", "") if content else ""
+    except Exception:
+        return ""
 
-    # TODO: Implement your agent logic here
-    # 1. Optionally load existing papers with get_paper() to review or build upon
-    # 2. Design experiments and run code
-    # 3. Analyze results
-    # 4. Write paper sections
 
-    return Paper(
-        title="",
-        introduction="",
-        methods="",
-        results="",
-        references="",  # Optional: citations and references
-        appendix="",    # Optional: auto-populated from script.py if empty
-        tags=[]
+def _build_brief(problem_domain: str, papers_data: list) -> ResearchBrief:
+    """Synthesize a ResearchBrief from pull_papers() results."""
+    citations = []
+    snippets = []
+
+    for result, _query, _source in papers_data[:20]:
+        title = result.get("title", "")
+        if title:
+            citations.append({
+                "title": title,
+                "journal": result.get("journal", ""),
+                "year": (result.get("publication_date") or "")[:4],
+                "doi": result.get("doi", ""),
+                "url": result.get("url", ""),
+            })
+        snippet = result.get("snippet") or result.get("content", "")
+        if snippet:
+            snippets.append(f"- {title}: {snippet[:300]}")
+
+    snippets_text = "\n".join(snippets[:15])
+    findings = _llm(
+        "You are a scientific research synthesizer.",
+        f"""Synthesize the key findings from these research snippets into 3-4 sentences
+relevant to the problem domain.
+
+Problem domain: {problem_domain}
+
+Research snippets:
+{snippets_text}
+
+Return only the synthesized findings paragraph.""",
+    ) or f"Literature review identified {len(citations)} relevant sources covering {problem_domain}."
+
+    return ResearchBrief(
+        problem_domain=problem_domain,
+        findings=findings,
+        citations=citations,
+        notes=f"Based on {len(citations)} papers retrieved via automated literature search.",
     )
+
+
+def run(problem_domain: str, papers_dir: Optional[Path] = None) -> Paper:
+    # Step 1: fetch research papers
+    research_dir = _AGENT_DIR / "research" / "".join(
+        c if c.isalnum() or c in "-_" else "_" for c in problem_domain
+    )[:60]
+    print(f"[run] fetching papers for: {problem_domain!r}")
+    papers_data = pull_papers(
+        problem_domain,
+        output_dir=str(research_dir),
+        n_queries=5,
+        use_exa=False,
+        use_pubmed=True,
+    )
+    print(f"[run] fetched {len(papers_data)} papers")
+
+    # Step 2: build ResearchBrief
+    brief = _build_brief(problem_domain, papers_data)
+
+    # Step 3: create paper output dir (use topic slug; renamed after title is known)
+    topic_slug = "".join(c if c.isalnum() or c in " -_" else "_" for c in problem_domain)[:60].strip()
+    paper_dir = _PAPERS_DIR / topic_slug
+    paper_dir.mkdir(parents=True, exist_ok=True)
+    brief.output_dir = paper_dir
+
+    # Step 4: run writing pipeline
+    print("[run] running writing pipeline...")
+    paper = orchestrate(brief)
+
+    # Rename dir to final title
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in paper.title)[:60].strip()
+    final_dir = _PAPERS_DIR / safe_title
+    if paper_dir.exists() and paper_dir != final_dir:
+        paper_dir.rename(final_dir)
+    paper_dir = final_dir
+
+    # Step 5: save PDF with embedded figures
+    figures_dir = paper_dir / "figures"
+    figure_paths = sorted(figures_dir.glob("*.png")) if figures_dir.exists() else []
+    pdf_path = paper_dir / "paper.pdf"
+    save_paper_as_pdf(paper, pdf_path, figure_paths=figure_paths)
+    print(f"[run] PDF saved → {pdf_path} ({len(figure_paths)} figure(s))")
+
+    return paper
