@@ -5,6 +5,35 @@ from pathlib import Path
 
 from .base import FigureArtifact, FigurePlan
 
+_DEFAULT_PALETTE = ["#2B6CB0", "#38A169", "#D69E2E", "#805AD5"]
+
+
+def _extract_label(item) -> str:
+    if isinstance(item, dict):
+        label = (
+            item.get("label") or item.get("name") or item.get("text")
+            or item.get("element") or item.get("element_id")
+            or str(next(iter(item.values()), ""))
+        )
+        return str(label)[:18]
+    return str(item)[:18]
+
+
+def _normalize_palette(style: dict) -> list[str]:
+    raw = style.get("palette", _DEFAULT_PALETTE)
+    if isinstance(raw, list):
+        colors = [c for c in raw if isinstance(c, str) and c.startswith("#")]
+        return colors if colors else _DEFAULT_PALETTE
+    if isinstance(raw, dict):
+        for key in ("primary", "main", "colors"):
+            if key in raw and isinstance(raw[key], list):
+                colors = [c for c in raw[key] if isinstance(c, str) and c.startswith("#")]
+                if colors:
+                    return colors
+        colors = [v for v in raw.values() if isinstance(v, str) and v.startswith("#")]
+        return colors if colors else _DEFAULT_PALETTE
+    return _DEFAULT_PALETTE
+
 
 def render_figures(plans: list[FigurePlan], working_dir: Path) -> list[FigureArtifact]:
     from hackathon_science.tools import image_to_base64, run_code
@@ -48,13 +77,14 @@ def render_figures(plans: list[FigurePlan], working_dir: Path) -> list[FigureArt
 
 
 def _diagram_code(plan: FigurePlan, filename: str) -> str:
-    elements = [str(e) for e in (plan.elements[:5] or ["Context", "Mechanism", "Outcome"])]
+    elements = [_extract_label(e) for e in (plan.elements[:5] or ["Context", "Mechanism", "Outcome"])]
+    palette = _normalize_palette(plan.style)
     payload = {
         "title": plan.title,
         "caption": plan.caption,
         "message": plan.message,
         "elements": elements,
-        "style": plan.style,
+        "palette": palette,
         "filename": filename,
     }
     return f'''
@@ -66,7 +96,7 @@ from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
 payload = json.loads({json.dumps(json.dumps(payload))})
 elements = payload["elements"]
-palette = payload["style"].get("palette", ["#2B6CB0", "#38A169", "#D69E2E", "#805AD5"])
+palette = payload["palette"]
 
 fig, ax = plt.subplots(figsize=(10.5, 4.8))
 ax.set_axis_off()
@@ -80,7 +110,6 @@ n = len(elements)
 box_w = min(0.17, 0.78 / max(n, 1))
 gap = (0.86 - n * box_w) / max(n - 1, 1)
 x = 0.07
-centers = []
 
 for i, label in enumerate(elements):
     color = palette[i % len(palette)]
@@ -93,7 +122,6 @@ for i, label in enumerate(elements):
     )
     ax.add_patch(rect)
     ax.text(x + box_w / 2, 0.515, label, ha="center", va="center", fontsize=9, wrap=True, color="#111111")
-    centers.append((x + box_w, 0.515))
     if i < n - 1:
         ax.add_patch(FancyArrowPatch(
             (x + box_w + 0.01, 0.515),
@@ -113,12 +141,13 @@ plt.close(fig)
 
 
 def _plot_code(plan: FigurePlan, filename: str) -> str:
-    labels = [str(item)[:18] for item in (plan.elements[:4] or ["Baseline", "Mechanism", "Outcome", "Replication"])]
+    labels = [_extract_label(e) for e in (plan.elements[:4] or ["Baseline", "Mechanism", "Outcome", "Replication"])]
+    palette = _normalize_palette(plan.style)
     payload = {
         "title": plan.title,
         "caption": plan.caption,
         "labels": labels,
-        "style": plan.style,
+        "palette": palette,
         "filename": filename,
     }
     return f'''
@@ -131,7 +160,7 @@ import numpy as np
 
 payload = json.loads({json.dumps(json.dumps(payload))})
 labels = payload["labels"]
-palette = payload["style"].get("palette", ["#2B6CB0", "#38A169", "#D69E2E", "#805AD5"])
+palette = payload["palette"]
 values = np.array([0.42 + 0.11 * i + 0.04 * math.sin(i + 1) for i in range(len(labels))])
 errors = np.array([0.06, 0.055, 0.05, 0.045][:len(labels)])
 
