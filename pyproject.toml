@@ -27,6 +27,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "pandas>=3.0.3",
     "openai>=1.0",
+    "pymed>=0.8.9",
 ]
 
 [project.optional-dependencies]
