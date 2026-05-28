@@ -128,17 +128,18 @@ from writing.figures import generate_figures
 
 
 @pytest.mark.integration
-def test_generate_figures_returns_string():
+def test_generate_figures_returns_tuple():
     results = "Caffeine group: mean 293ms (SD=19). Placebo group: mean 344ms (SD=22). t(38)=8.3, p<0.001."
-    result = generate_figures(SAMPLE_BRIEF, {"results": results})
-    assert isinstance(result, str)
+    figures_md, appendix = generate_figures(SAMPLE_BRIEF, {"results": results})
+    assert isinstance(figures_md, str)
+    assert isinstance(appendix, str)
 
 
 @pytest.mark.integration
 def test_generate_figures_embeds_image_or_empty():
     results = "Caffeine reduced reaction time by 15% vs placebo."
-    result = generate_figures(SAMPLE_BRIEF, {"results": results})
-    assert result == "" or result.startswith("![")
+    figures_md, appendix = generate_figures(SAMPLE_BRIEF, {"results": results})
+    assert figures_md == "" or figures_md.startswith("![")
 
 
 from writing.editors import review_paper, merge_reviews, apply_revisions

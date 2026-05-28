@@ -43,12 +43,15 @@ def orchestrate(brief: ResearchBrief) -> Paper:
         with lock:
             deps = {k: results[k] for k in DEPENDENCIES[name]}
         try:
-            text = _AGENTS[name](brief, deps)
+            result = _AGENTS[name](brief, deps)
         except Exception as e:
             print(f"[orchestrator] agent '{name}' failed: {e}")
-            text = ""
+            result = ""
         with lock:
-            results[name] = text
+            if name == "figures" and isinstance(result, tuple):
+                results["figures"], results["figures_appendix"] = result
+            else:
+                results[name] = result
 
     with ThreadPoolExecutor(max_workers=4) as executor:
         pending: dict[Future, str] = {}
@@ -69,6 +72,7 @@ def orchestrate(brief: ResearchBrief) -> Paper:
             submit_ready()
 
     figures_text = results.get("figures", "")
+    figure_appendix = results.get("figures_appendix", "")
     sections = {
         "intro": results.get("intro", ""),
         "method": results.get("method", ""),
@@ -95,7 +99,7 @@ def orchestrate(brief: ResearchBrief) -> Paper:
         methods=revised.get("method", ""),
         results=revised.get("results", ""),
         references=revised.get("references", ""),
-        appendix="",
+        appendix=figure_appendix,
         tags=[brief.problem_domain],
     )
 
