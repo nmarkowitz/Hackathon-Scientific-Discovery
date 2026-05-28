@@ -122,3 +122,93 @@ def test_write_abstract_returns_nonempty():
     result = write_abstract(SAMPLE_BRIEF, {"intro": intro, "discussion": discussion, "results": results})
     assert isinstance(result, str)
     assert len(result) > 50
+
+
+from writing.figures import generate_figures
+
+
+@pytest.mark.integration
+def test_generate_figures_returns_string():
+    results = "Caffeine group: mean 293ms (SD=19). Placebo group: mean 344ms (SD=22). t(38)=8.3, p<0.001."
+    result = generate_figures(SAMPLE_BRIEF, {"results": results})
+    assert isinstance(result, str)
+
+
+@pytest.mark.integration
+def test_generate_figures_embeds_image_or_empty():
+    results = "Caffeine reduced reaction time by 15% vs placebo."
+    result = generate_figures(SAMPLE_BRIEF, {"results": results})
+    assert result == "" or result.startswith("![")
+
+
+from writing.editors import review_paper, merge_reviews, apply_revisions
+
+
+def test_merge_reviews_deduplicates():
+    r1 = [
+        {"section": "results", "issue": "No error bars shown", "suggestion": "Add SD or SE to all plots."},
+        {"section": "intro", "issue": "Missing motivation", "suggestion": "Add a sentence on why this matters."},
+    ]
+    r2 = [
+        {"section": "results", "issue": "No error bars shown", "suggestion": "Add error bars."},
+        {"section": "discussion", "issue": "No limitations", "suggestion": "Add a limitations paragraph."},
+    ]
+    merged = merge_reviews(r1, r2)
+    sections = [item["section"] for item in merged]
+    assert "results" in sections
+    assert "intro" in sections
+    assert "discussion" in sections
+    results_items = [item for item in merged if item["section"] == "results"]
+    assert len(results_items) == 1
+
+
+@pytest.mark.integration
+def test_review_paper_returns_list():
+    draft = {
+        "intro": "Caffeine is a stimulant consumed worldwide.",
+        "method": "Participants were randomized to caffeine or placebo.",
+        "results": "Caffeine reduced reaction time by 15% (p<0.01).",
+        "discussion": "Results support prior literature.",
+        "abstract": "We studied caffeine effects on reaction time.",
+        "references": "1. Smith 2020. J. Neuroscience.",
+    }
+    reviews = review_paper("Reviewer 1", draft)
+    assert isinstance(reviews, list)
+
+
+@pytest.mark.integration
+def test_apply_revisions_returns_nonempty_sections():
+    sections = {
+        "results": "Caffeine reduced reaction time by 15%.",
+        "intro": "Caffeine is a stimulant.",
+    }
+    feedback = [
+        {"section": "results", "issue": "No statistics", "suggestion": "Add p-value and sample size."},
+    ]
+    revised = apply_revisions(sections, feedback)
+    assert "results" in revised
+    assert "intro" in revised
+    assert isinstance(revised["results"], str)
+    assert len(revised["results"]) > 0
+
+
+from writing.orchestrator import orchestrate
+from hackathon_science.models import Paper
+
+
+@pytest.mark.integration
+def test_orchestrate_returns_valid_paper():
+    result = orchestrate(SAMPLE_BRIEF)
+    assert isinstance(result, Paper)
+    assert len(result.title) > 0
+    assert len(result.introduction) > 0
+    assert len(result.methods) > 0
+    assert len(result.results) > 0
+
+
+@pytest.mark.integration
+def test_orchestrate_with_minimal_brief():
+    brief = ResearchBrief(problem_domain="effect of sleep deprivation on memory recall")
+    result = orchestrate(brief)
+    assert isinstance(result, Paper)
+    assert len(result.title) > 0
