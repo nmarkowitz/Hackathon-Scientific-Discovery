@@ -1,0 +1,11 @@
+[team]
+name = "fig_creator"
+working_dir = "agents/fig_creator/files"
+
+[models]
+run_agent_model = "global.anthropic.claude-sonnet-4-6"
+review_agent_model = "global.anthropic.claude-sonnet-4-6"
+
+[tools]
+code_execution_timeout = 300
+search_max_results = 6
