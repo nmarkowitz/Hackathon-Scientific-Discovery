@@ -28,6 +28,7 @@ dependencies = [
     "pandas>=3.0.3",
     "openai>=1.0",
     "pymed>=0.8.9",
+    "fpdf2>=2.8.7",
 ]
 
 [project.optional-dependencies]

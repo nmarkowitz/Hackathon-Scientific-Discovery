@@ -12,6 +12,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from pymed import PubMed
 from writing import ResearchBrief, orchestrate
+from writing.pdf import save_paper_as_pdf
+
+PAPERS_DIR = Path(__file__).parent / "papers"
 
 TOPIC = "how to ride a bicycle using quantum mechanics and a squirrel"
 
@@ -134,7 +137,13 @@ def main():
 
     paper = orchestrate(brief)
 
-    print("Step 4: Done!")
+    print("Step 4: Saving PDF...")
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in paper.title)[:60].strip()
+    pdf_path = PAPERS_DIR / f"{safe_title}.pdf"
+    save_paper_as_pdf(paper, pdf_path)
+    print(f"  saved → {pdf_path}\n")
+
+    print("Step 5: Done!")
     print_paper(paper)
 
 
