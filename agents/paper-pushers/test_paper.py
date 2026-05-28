@@ -78,6 +78,7 @@ def build_brief(papers: list[dict]) -> ResearchBrief:
         findings=findings,
         citations=citations,
         notes=notes,
+        # output_dir set by main() after title is known
     )
 
 
@@ -128,6 +129,12 @@ def main():
     brief = build_brief(papers)
     print(f"  {len(brief.citations)} citations loaded\n")
 
+    # Create a temporary paper dir using the topic slug; will be renamed once title is known
+    topic_slug = "".join(c if c.isalnum() or c in " -_" else "_" for c in TOPIC)[:60].strip()
+    paper_dir = PAPERS_DIR / topic_slug
+    paper_dir.mkdir(parents=True, exist_ok=True)
+    brief.output_dir = paper_dir
+
     print("Step 3: Running writing pipeline (this takes ~2-3 minutes)...")
     print("  [method + references running in parallel]")
     print("  [results, figures, intro, discussion, abstract follow in waves]")
@@ -137,11 +144,24 @@ def main():
 
     paper = orchestrate(brief)
 
-    print("Step 4: Saving PDF...")
+    # Rename dir to final title
     safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in paper.title)[:60].strip()
-    pdf_path = PAPERS_DIR / f"{safe_title}.pdf"
-    save_paper_as_pdf(paper, pdf_path)
-    print(f"  saved → {pdf_path}\n")
+    final_dir = PAPERS_DIR / safe_title
+    if paper_dir != final_dir:
+        paper_dir.rename(final_dir)
+    paper_dir = final_dir
+
+    # Collect generated PNGs from figures subdir
+    figures_dir = paper_dir / "figures"
+    figure_paths = sorted(figures_dir.glob("*.png")) if figures_dir.exists() else []
+
+    print("Step 4: Saving PDF...")
+    pdf_path = paper_dir / "paper.pdf"
+    save_paper_as_pdf(paper, pdf_path, figure_paths=figure_paths)
+    print(f"  saved → {pdf_path}")
+    if figure_paths:
+        print(f"  embedded {len(figure_paths)} figure(s): {[p.name for p in figure_paths]}")
+    print()
 
     print("Step 5: Done!")
     print_paper(paper)

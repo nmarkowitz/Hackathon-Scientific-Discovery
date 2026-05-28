@@ -8,7 +8,10 @@ from .brief import ResearchBrief
 
 
 def generate_figures(brief: ResearchBrief, deps: dict[str, str]) -> tuple[str, str]:
-    working_dir = Path(__file__).parent / "fig_creator" / "files"
+    if brief.output_dir is not None:
+        working_dir = brief.output_dir / "figures"
+    else:
+        working_dir = Path(__file__).parent / "fig_creator" / "files"
     working_dir.mkdir(parents=True, exist_ok=True)
     try:
         figures_md, figure_appendix, _ = create_figures(brief.problem_domain, working_dir)
