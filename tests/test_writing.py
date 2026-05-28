@@ -21,5 +21,10 @@ def test_research_brief_full():
         citations=[{"title": "Smith 2020", "url": "https://example.com"}],
         notes="Preliminary findings only.",
     )
+    assert brief.problem_domain == "caffeine study"
+    assert brief.findings == "Caffeine reduces reaction time by 15%."
     assert brief.data["reaction_times_ms"] == [320, 290, 305, 270, 315]
+    assert brief.figure_specs == [{"type": "bar", "title": "Reaction time by dose"}]
     assert len(brief.citations) == 1
+    assert brief.citations[0]["title"] == "Smith 2020"
+    assert brief.notes == "Preliminary findings only."
